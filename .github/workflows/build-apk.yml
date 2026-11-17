@@ -88,9 +88,10 @@ jobs:
             echo "Using existing app/google-services.json"
           elif [ -n "${GOOGLE_SERVICES_JSON}" ]; then
             echo "Writing app/google-services.json from GOOGLE_SERVICES_JSON secret"
-            case "${GOOGLE_SERVICES_JSON}" in
+            TRIMMED_GS="$(printf '%s' "${GOOGLE_SERVICES_JSON}" | sed -e 's/^[[:space:]]*//')"
+            case "${TRIMMED_GS}" in
               \{*) printf '%s\n' "${GOOGLE_SERVICES_JSON}" > app/google-services.json ;;
-              *) printf '%s' "${GOOGLE_SERVICES_JSON}" | base64 -d > app/google-services.json ;;
+              *) printf '%s' "${GOOGLE_SERVICES_JSON}" | tr -d '[:space:]' | base64 -d > app/google-services.json ;;
             esac
           else
             echo "::warning::app/google-services.json was not pushed to GitHub. Using a CI placeholder google-services.json so the debug APK builds cleanly. Add GOOGLE_SERVICES_JSON in GitHub Secrets for live Firebase Auth/Firestore/AI in CI builds."
