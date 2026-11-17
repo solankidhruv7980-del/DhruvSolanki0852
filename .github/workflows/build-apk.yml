@@ -61,14 +61,19 @@ jobs:
           fi
 
       - name: Prepare debug keystore
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
           if [ -f debug.keystore ]; then
             echo "Using existing debug.keystore"
           elif [ -f debug.keystore.base64 ]; then
             echo "Decoding debug.keystore from debug.keystore.base64"
             base64 -d debug.keystore.base64 > debug.keystore
+          elif [ -n "${DEBUG_KEYSTORE_BASE64}" ]; then
+            echo "Decoding debug.keystore from DEBUG_KEYSTORE_BASE64 secret"
+            printf '%s' "${DEBUG_KEYSTORE_BASE64}" | tr -d '[:space:]' | base64 -d > debug.keystore
           else
-            echo "Generating temporary debug.keystore"
+            echo "::warning::Generating temporary debug.keystore. Note: Google Sign-In requires DEBUG_KEYSTORE_BASE64 + GOOGLE_SERVICES_JSON secrets to match Firebase SHA-1."
             keytool -genkeypair -v \
               -keystore debug.keystore \
               -storepass android \

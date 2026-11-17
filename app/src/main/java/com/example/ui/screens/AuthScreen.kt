@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
@@ -111,6 +113,7 @@ fun AuthScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .safeDrawingPadding()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -166,11 +169,20 @@ fun AuthScreen(
                 }
 
                 if (!errorMessage.isNullOrBlank()) {
-                    Text(
-                        text = errorMessage!!,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = PolicyRed
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.medium)
+                            .background(PolicyRed.copy(alpha = 0.14f))
+                            .border(1.dp, PolicyRed.copy(alpha = 0.6f), MaterialTheme.shapes.medium)
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = errorMessage!!,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = StudioTextPrimary
+                        )
+                    }
                 }
 
                 Button(
@@ -187,6 +199,7 @@ fun AuthScreen(
                             },
                             onAuthCancelled = {
                                 isLoading = false
+                                errorMessage = "Google Sign-In was cancelled. Tap Sign in with Google to retry."
                             },
                             onAuthError = { msg ->
                                 isLoading = false
