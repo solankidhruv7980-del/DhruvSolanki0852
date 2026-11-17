@@ -71,16 +71,20 @@ fun AuthScreen(
     val credentialManager = remember { CredentialManager.create(context) }
 
     var isLoading by remember { mutableStateOf(false) }
+    var hasAttemptedAutoSignIn by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        attemptAutoSignIn(
-            context = context,
-            credentialManager = credentialManager,
-            scope = scope,
-            onAuthSuccess = onAuthSuccess,
-            onUnauthenticated = {}
-        )
+        if (!hasAttemptedAutoSignIn && !isLoading) {
+            hasAttemptedAutoSignIn = true
+            attemptAutoSignIn(
+                context = context,
+                credentialManager = credentialManager,
+                scope = scope,
+                onAuthSuccess = onAuthSuccess,
+                onUnauthenticated = {}
+            )
+        }
     }
 
     Box(
@@ -197,9 +201,13 @@ fun AuthScreen(
                                 isLoading = false
                                 onAuthSuccess()
                             },
-                            onAuthCancelled = {
+                            onAuthCancelled = { detail ->
                                 isLoading = false
-                                errorMessage = "Google Sign-In was cancelled. Tap Sign in with Google to retry."
+                                errorMessage = if (detail != null) {
+                                    "Google Sign-In did not complete ($detail). Tap Sign in with Google to retry."
+                                } else {
+                                    "Google Sign-In did not complete. If you just added your Google account, tap Sign in with Google once more."
+                                }
                             },
                             onAuthError = { msg ->
                                 isLoading = false

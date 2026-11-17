@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
@@ -25,9 +27,11 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import java.security.MessageDigest
 
 private const val TAG = "GoogleAuthHelper"
 private const val PLACEHOLDER_CLIENT_ID_PREFIX = "000000000000-placeholder"
+private const val EXPECTED_FIREBASE_SHA1 = "D2511D569768E46959586CB96E049FB83DFD1A76"
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
@@ -48,20 +52,48 @@ private fun resolveDefaultWebClientId(context: Context): String? {
         ?.takeIf { it.isNotBlank() }
 }
 
-private fun formatSignInFailureMessage(error: Exception): String {
+@Suppress("DEPRECATION")
+private fun getAppSigningSha1Hex(context: Context): String? {
+    return runCatching {
+        val pm = context.packageManager
+        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val pkgInfo = pm.getPackageInfo(
+                context.packageName,
+                PackageManager.GET_SIGNING_CERTIFICATES
+            )
+            pkgInfo.signingInfo?.apkContentsSigners
+        } else {
+            val pkgInfo = pm.getPackageInfo(
+                context.packageName,
+                PackageManager.GET_SIGNATURES
+            )
+            pkgInfo.signatures
+        }
+        val certBytes = signatures?.firstOrNull()?.toByteArray() ?: return null
+        val digest = MessageDigest.getInstance("SHA-1").digest(certBytes)
+        digest.joinToString("") { "%02X".format(it) }
+    }.getOrNull()
+}
+
+private fun formatSignInFailureMessage(context: Context, error: Exception): String {
     val detail = (error as? GetCredentialException)?.errorMessage?.toString()
         ?: error.localizedMessage
         ?: error.message
         ?: ""
     val lower = detail.lowercase()
+    val actualSha1 = getAppSigningSha1Hex(context)
+    val sha1Mismatch = actualSha1 != null && !actualSha1.equals(EXPECTED_FIREBASE_SHA1, ignoreCase = true)
 
     return when {
+        sha1Mismatch ->
+            "This APK's signing certificate SHA-1 ($actualSha1) does not match Firebase ($EXPECTED_FIREBASE_SHA1). " +
+                "If built on GitHub Actions, add DEBUG_KEYSTORE_BASE64 and GOOGLE_SERVICES_JSON secrets, or install the APK built in AI Studio."
         error is NoCredentialException ->
-            "No Google account credential was available for this app. Check that a Google account is signed in on this device, and that this APK is signed with the SHA-1 registered in Firebase."
+            "No Google account credential returned. If you just added a Google account, tap 'Sign in with Google' once more, or verify Play Services is updated."
         error is GetCredentialUnsupportedException ->
             "Google Credential Manager is unsupported or disabled on this device. Update Google Play Services and try again."
         lower.contains("developer_error") || lower.contains("developer console") || lower.contains("10:") ->
-            "Google Sign-In configuration mismatch (SHA-1 or OAuth Web Client ID). Install the APK signed with the Firebase-registered debug keystore and real google-services.json."
+            "Google Sign-In configuration mismatch (SHA-1 or OAuth Web Client ID). Check google-services.json and keystore SHA-1."
         lower.contains("network") || lower.contains("7:") ->
             "Network error while contacting Google Sign-In. Check your internet connection and retry."
         detail.isNotBlank() ->
@@ -122,14 +154,28 @@ fun launchInteractiveGoogleSignIn(
     credentialManager: CredentialManager,
     scope: CoroutineScope,
     onAuthSuccess: () -> Unit,
-    onAuthCancelled: () -> Unit,
+    onAuthCancelled: (String?) -> Unit,
     onAuthError: (String) -> Unit
 ) {
+    if (Firebase.auth.currentUser != null) {
+        onAuthSuccess()
+        return
+    }
+
     val clientId = resolveDefaultWebClientId(context)
     if (clientId == null || clientId.startsWith(PLACEHOLDER_CLIENT_ID_PREFIX)) {
         onAuthError(
-            "Firebase OAuth config is missing in this build (placeholder google-services.json). " +
-                "Rebuild with the real google-services.json and matching keystore, or install the APK from AI Studio."
+            "Firebase OAuth config is missing in this APK (placeholder google-services.json). " +
+                "Add GOOGLE_SERVICES_JSON and DEBUG_KEYSTORE_BASE64 secrets in GitHub, or install the APK built directly from AI Studio."
+        )
+        return
+    }
+
+    val actualSha1 = getAppSigningSha1Hex(context)
+    if (actualSha1 != null && !actualSha1.equals(EXPECTED_FIREBASE_SHA1, ignoreCase = true)) {
+        onAuthError(
+            "APK signing SHA-1 ($actualSha1) does not match Firebase ($EXPECTED_FIREBASE_SHA1). " +
+                "Add DEBUG_KEYSTORE_BASE64 and GOOGLE_SERVICES_JSON secrets in GitHub Actions, or install the APK from AI Studio."
         )
         return
     }
@@ -142,38 +188,12 @@ fun launchInteractiveGoogleSignIn(
 
     scope.launch {
         try {
-            // Primary request: single-option GetSignInWithGoogleOption (API 36 responsive bottom sheet)
             val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
-            val primaryRequest = GetCredentialRequest.Builder()
+            val request = GetCredentialRequest.Builder()
                 .addCredentialOption(signInOption)
                 .build()
 
-            val result = try {
-                credentialManager.getCredential(activityContext, primaryRequest)
-            } catch (e: NoCredentialException) {
-                Log.w(TAG, "Primary GetSignInWithGoogleOption returned NoCredentialException; trying GetGoogleIdOption fallback", e)
-                val fallbackOption = GetGoogleIdOption.Builder()
-                    .setFilterByAuthorizedAccounts(false)
-                    .setServerClientId(clientId)
-                    .setAutoSelectEnabled(false)
-                    .build()
-                val fallbackRequest = GetCredentialRequest.Builder()
-                    .addCredentialOption(fallbackOption)
-                    .build()
-                credentialManager.getCredential(activityContext, fallbackRequest)
-            } catch (e: GetCredentialUnsupportedException) {
-                Log.w(TAG, "Primary GetSignInWithGoogleOption unsupported; trying GetGoogleIdOption fallback", e)
-                val fallbackOption = GetGoogleIdOption.Builder()
-                    .setFilterByAuthorizedAccounts(false)
-                    .setServerClientId(clientId)
-                    .setAutoSelectEnabled(false)
-                    .build()
-                val fallbackRequest = GetCredentialRequest.Builder()
-                    .addCredentialOption(fallbackOption)
-                    .build()
-                credentialManager.getCredential(activityContext, fallbackRequest)
-            }
-
+            val result = credentialManager.getCredential(activityContext, request)
             val credential = result.credential
             if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                 val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
@@ -185,10 +205,11 @@ fun launchInteractiveGoogleSignIn(
             }
         } catch (e: GetCredentialCancellationException) {
             Log.w(TAG, "Google Sign-In cancelled or dismissed: ${e.message}", e)
-            onAuthCancelled()
+            val detail = e.errorMessage?.toString()?.takeIf { it.isNotBlank() }
+            onAuthCancelled(detail)
         } catch (e: Exception) {
             Log.e(TAG, "Google Sign-In failed", e)
-            onAuthError(formatSignInFailureMessage(e))
+            onAuthError(formatSignInFailureMessage(context, e))
         }
     }
 }
