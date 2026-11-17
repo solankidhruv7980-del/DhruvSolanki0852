@@ -171,15 +171,6 @@ fun launchInteractiveGoogleSignIn(
         return
     }
 
-    val actualSha1 = getAppSigningSha1Hex(context)
-    if (actualSha1 != null && !actualSha1.equals(EXPECTED_FIREBASE_SHA1, ignoreCase = true)) {
-        onAuthError(
-            "APK signing SHA-1 ($actualSha1) does not match Firebase ($EXPECTED_FIREBASE_SHA1). " +
-                "Add DEBUG_KEYSTORE_BASE64 and GOOGLE_SERVICES_JSON secrets in GitHub Actions, or install the APK from AI Studio."
-        )
-        return
-    }
-
     val activityContext = context.findActivity()
     if (activityContext == null) {
         onAuthError("Unable to start Google Sign-In without an active screen.")
