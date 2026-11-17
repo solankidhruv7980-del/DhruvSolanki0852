@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<resources>
+    <string name="firestore_database_id" translatable="false">ai-studio-android-omnitube-39a5794e-1605-4ba1-9a2a-387906800363</string>
+    <string name="recaptcha_site_key" translatable="false">6LcT6R0uAAAAAPa6SJS28vR7u8MtTsQjZsiaLeka</string>
+</resources>

@@ -1,0 +1,316 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidStringList(val, maxItems) {
+      return val is list &&
+             val.size() <= maxItems &&
+             (val.size() == 0 || val[0] is string);
+    }
+
+    function isValidUserProfile(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.displayName is string &&
+             data.displayName.size() >= 1 &&
+             data.displayName.size() <= 80 &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 120));
+    }
+
+    function isValidStudioConfig(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.isMasterAutopilotOn is bool &&
+             data.dailyVideoFrequency is int &&
+             data.dailyVideoFrequency >= 1 &&
+             data.dailyVideoFrequency <= 20 &&
+             data.contentType in ['AI_ANIMATION', 'REAL_FOOTAGE', 'HYBRID'] &&
+             data.formatMode in ['DUAL', 'SHORTS_9_16', 'LONG_16_9'] &&
+             data.shortsRatioPercent is int &&
+             data.shortsRatioPercent >= 0 &&
+             data.shortsRatioPercent <= 100 &&
+             data.primaryNiche is string &&
+             data.primaryNiche.size() >= 1 &&
+             data.primaryNiche.size() <= 120 &&
+             data.activeFunkTrackId is string &&
+             data.activeFunkTrackId.size() >= 1 &&
+             data.activeFunkTrackId.size() <= 64;
+    }
+
+    function isValidBatchItem(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.title is string &&
+             data.title.size() >= 1 &&
+             data.title.size() <= 160 &&
+             data.hookScript is string &&
+             data.hookScript.size() >= 1 &&
+             data.hookScript.size() <= 4000 &&
+             data.format in ['9:16', '16:9'] &&
+             data.contentMode in ['AI_ANIMATION', 'REAL_FOOTAGE', 'HYBRID'] &&
+             data.scheduledSlotLabel is string &&
+             data.scheduledSlotLabel.size() >= 1 &&
+             data.scheduledSlotLabel.size() <= 40 &&
+             data.funkTrackId is string &&
+             data.funkTrackId.size() >= 1 &&
+             data.funkTrackId.size() <= 64 &&
+             data.funkTrackTitle is string &&
+             data.funkTrackTitle.size() >= 1 &&
+             data.funkTrackTitle.size() <= 100 &&
+             isValidStringList(data.memeCues, 12) &&
+             data.animationCode is string &&
+             data.animationCode.size() <= 12000 &&
+             data.seoDescription is string &&
+             data.seoDescription.size() <= 3000 &&
+             isValidStringList(data.seoTags, 15) &&
+             data.yppScore is int &&
+             data.yppScore >= 0 &&
+             data.yppScore <= 100 &&
+             (data.estimatedRpmUsd is int || data.estimatedRpmUsd is float) &&
+             data.estimatedRpmUsd >= 0 &&
+             data.estimatedRpmUsd <= 500 &&
+             data.status in ['QUEUED', 'READY', 'AUDITED', 'PUBLISHED'];
+    }
+
+    function isValidAuditRecord(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.targetTitle is string &&
+             data.targetTitle.size() >= 1 &&
+             data.targetTitle.size() <= 200 &&
+             data.safetyScore is int &&
+             data.safetyScore >= 0 &&
+             data.safetyScore <= 100 &&
+             (data.estimatedRpmUsd is int || data.estimatedRpmUsd is float) &&
+             data.estimatedRpmUsd >= 0 &&
+             data.estimatedRpmUsd <= 500 &&
+             data.reusedContentRisk in ['LOW', 'MEDIUM', 'HIGH'] &&
+             data.copyrightRisk in ['LOW', 'MEDIUM', 'HIGH'] &&
+             data.advertiserFriendly is bool &&
+             data.summary is string &&
+             data.summary.size() >= 1 &&
+             data.summary.size() <= 2000 &&
+             isValidStringList(data.recommendations, 10);
+    }
+
+    function isValidChannelConnection(data) {
+      return data.userId is string &&
+             data.userId.size() >= 1 &&
+             data.userId.size() <= 128 &&
+             data.channelHandle is string &&
+             data.channelHandle.size() <= 80 &&
+             data.channelId is string &&
+             data.channelId.size() <= 80 &&
+             data.oauthClientId is string &&
+             data.oauthClientId.size() <= 180 &&
+             isValidStringList(data.grantedScopes, 10) &&
+             data.isLinked is bool;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      match /studio_config/{configId} {
+        allow get: if isOwner(userId) && isValidId(configId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(configId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'isMasterAutopilotOn', 'dailyVideoFrequency',
+                           'contentType', 'formatMode', 'shortsRatioPercent',
+                           'primaryNiche', 'activeFunkTrackId', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'isMasterAutopilotOn', 'dailyVideoFrequency',
+                           'contentType', 'formatMode', 'shortsRatioPercent',
+                           'primaryNiche', 'activeFunkTrackId', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         isValidStudioConfig(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(configId) &&
+                         isValidStudioConfig(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'isMasterAutopilotOn', 'dailyVideoFrequency', 'contentType',
+                           'formatMode', 'shortsRatioPercent', 'primaryNiche',
+                           'activeFunkTrackId', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(configId);
+      }
+
+      match /batches/{batchId} {
+        allow get: if isOwner(userId) && isValidId(batchId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(batchId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'title', 'hookScript', 'format', 'contentMode',
+                           'scheduledSlotLabel', 'funkTrackId', 'funkTrackTitle',
+                           'memeCues', 'animationCode', 'seoDescription', 'seoTags',
+                           'yppScore', 'estimatedRpmUsd', 'status', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'title', 'hookScript', 'format', 'contentMode',
+                           'scheduledSlotLabel', 'funkTrackId', 'funkTrackTitle',
+                           'memeCues', 'animationCode', 'seoDescription', 'seoTags',
+                           'yppScore', 'estimatedRpmUsd', 'status', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         isValidBatchItem(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(batchId) &&
+                         isValidBatchItem(incoming()) &&
+                         existing().status != 'PUBLISHED' &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         (
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'funkTrackId', 'funkTrackTitle', 'updatedAt'
+                           ]) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'status', 'yppScore', 'estimatedRpmUsd', 'updatedAt'
+                           ]) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'title', 'hookScript', 'format', 'contentMode',
+                             'scheduledSlotLabel', 'funkTrackId', 'funkTrackTitle',
+                             'memeCues', 'animationCode', 'seoDescription', 'seoTags',
+                             'yppScore', 'estimatedRpmUsd', 'status', 'updatedAt'
+                           ])
+                         );
+
+        allow delete: if isOwner(userId) && isValidId(batchId);
+      }
+
+      match /audits/{auditId} {
+        allow get: if isOwner(userId) && isValidId(auditId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(auditId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'targetTitle', 'safetyScore', 'estimatedRpmUsd',
+                           'reusedContentRisk', 'copyrightRisk', 'advertiserFriendly',
+                           'summary', 'recommendations', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'targetTitle', 'safetyScore', 'estimatedRpmUsd',
+                           'reusedContentRisk', 'copyrightRisk', 'advertiserFriendly',
+                           'summary', 'recommendations', 'createdAt'
+                         ]) &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         isValidAuditRecord(incoming());
+
+        allow update: if false;
+        allow delete: if isOwner(userId) && isValidId(auditId);
+      }
+
+      match /channel_connection/{connectionId} {
+        allow get: if isOwner(userId) && isValidId(connectionId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(connectionId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'channelHandle', 'channelId', 'oauthClientId',
+                           'grantedScopes', 'isLinked', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'channelHandle', 'channelId', 'oauthClientId',
+                           'grantedScopes', 'isLinked', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         isValidChannelConnection(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(connectionId) &&
+                         isValidChannelConnection(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt is timestamp &&
+                         incoming().updatedAt <= request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'channelHandle', 'channelId', 'oauthClientId',
+                           'grantedScopes', 'isLinked', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(connectionId);
+      }
+    }
+  }
+}

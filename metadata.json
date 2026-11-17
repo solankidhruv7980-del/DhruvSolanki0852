@@ -1,0 +1,6 @@
+{
+  "name": "OmniTube Studio",
+  "description": "Autonomous YouTube channel studio with AI production, daily frequency scheduler, funk track swapper, and YPP monetization auditor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

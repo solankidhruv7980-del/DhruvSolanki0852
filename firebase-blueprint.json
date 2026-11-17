@@ -1,0 +1,177 @@
+{
+  "entities": {
+    "StudioUserProfile": {
+      "title": "Studio User Profile",
+      "description": "Authenticated creator profile owning the OmniTube studio workspace.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "displayName", "createdAt", "updatedAt"]
+    },
+    "StudioConfig": {
+      "title": "Studio Autopilot Config",
+      "description": "Master switch, daily video frequency, format mix, niche, and active funk track.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "isMasterAutopilotOn": { "type": "boolean" },
+        "dailyVideoFrequency": { "type": "integer" },
+        "contentType": {
+          "type": "string",
+          "enum": ["AI_ANIMATION", "REAL_FOOTAGE", "HYBRID"]
+        },
+        "formatMode": {
+          "type": "string",
+          "enum": ["DUAL", "SHORTS_9_16", "LONG_16_9"]
+        },
+        "shortsRatioPercent": { "type": "integer" },
+        "primaryNiche": { "type": "string" },
+        "activeFunkTrackId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "isMasterAutopilotOn",
+        "dailyVideoFrequency",
+        "contentType",
+        "formatMode",
+        "shortsRatioPercent",
+        "primaryNiche",
+        "activeFunkTrackId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ProductionBatchItem": {
+      "title": "Production Batch Item",
+      "description": "Scheduled daily video payload with hook script, animation code, meme cues, funk track, and YPP score.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "hookScript": { "type": "string" },
+        "format": { "type": "string", "enum": ["9:16", "16:9"] },
+        "contentMode": {
+          "type": "string",
+          "enum": ["AI_ANIMATION", "REAL_FOOTAGE", "HYBRID"]
+        },
+        "scheduledSlotLabel": { "type": "string" },
+        "funkTrackId": { "type": "string" },
+        "funkTrackTitle": { "type": "string" },
+        "memeCues": { "type": "array" },
+        "animationCode": { "type": "string" },
+        "seoDescription": { "type": "string" },
+        "seoTags": { "type": "array" },
+        "yppScore": { "type": "integer" },
+        "estimatedRpmUsd": { "type": "number" },
+        "status": {
+          "type": "string",
+          "enum": ["QUEUED", "READY", "AUDITED", "PUBLISHED"]
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "title",
+        "hookScript",
+        "format",
+        "contentMode",
+        "scheduledSlotLabel",
+        "funkTrackId",
+        "funkTrackTitle",
+        "memeCues",
+        "animationCode",
+        "seoDescription",
+        "seoTags",
+        "yppScore",
+        "estimatedRpmUsd",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "YppAuditRecord": {
+      "title": "YPP Compliance Audit Record",
+      "description": "Monetization and YouTube Partner Program pre-publish compliance evaluation.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "targetTitle": { "type": "string" },
+        "safetyScore": { "type": "integer" },
+        "estimatedRpmUsd": { "type": "number" },
+        "reusedContentRisk": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+        "copyrightRisk": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+        "advertiserFriendly": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "recommendations": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "targetTitle",
+        "safetyScore",
+        "estimatedRpmUsd",
+        "reusedContentRisk",
+        "copyrightRisk",
+        "advertiserFriendly",
+        "summary",
+        "recommendations",
+        "createdAt"
+      ]
+    },
+    "ChannelConnection": {
+      "title": "YouTube Channel OAuth Connection",
+      "description": "YouTube Data API v3 and OAuth 2.0 channel configuration persisted per user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "channelHandle": { "type": "string" },
+        "channelId": { "type": "string" },
+        "oauthClientId": { "type": "string" },
+        "grantedScopes": { "type": "array" },
+        "isLinked": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "channelHandle",
+        "channelId",
+        "oauthClientId",
+        "grantedScopes",
+        "isLinked",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/StudioUserProfile" },
+      "description": "Owner profile document"
+    },
+    "/users/{userId}/studio_config/{configId}": {
+      "schema": { "$ref": "#/entities/StudioConfig" },
+      "description": "Master switch, daily video frequency, format mix, and funk track selection"
+    },
+    "/users/{userId}/batches/{batchId}": {
+      "schema": { "$ref": "#/entities/ProductionBatchItem" },
+      "description": "Scheduled production video batches"
+    },
+    "/users/{userId}/audits/{auditId}": {
+      "schema": { "$ref": "#/entities/YppAuditRecord" },
+      "description": "YPP monetization and policy safety audits"
+    },
+    "/users/{userId}/channel_connection/{connectionId}": {
+      "schema": { "$ref": "#/entities/ChannelConnection" },
+      "description": "YouTube OAuth 2.0 and Data API configuration"
+    }
+  }
+}
